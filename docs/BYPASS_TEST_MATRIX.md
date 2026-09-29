@@ -20,4 +20,4 @@ No platform enforcement exists yet, so every row is **NOT YET SUPPORTED / NOT TE
 | Clock manipulation | NOT TESTED | NOT TESTED | — |
 | Config modification | NOT TESTED | NOT TESTED | — |
 | App downgrade | NOT TESTED | NOT TESTED | — |
-| Blocklist rollback | NOT TESTED | NOT TESTED | — |
+| Blocklist rollback | BLOCKED (list layer) | BLOCKED (list layer, shared core) | `core/blocklists/tests/updater.rs`: older and equal versions rejected; live run 2026-09-29 kept v2 when a tampered v3 was offered |

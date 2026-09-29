@@ -28,7 +28,19 @@ Manual run (Linux container, 2026-09-29), `console --listen 127.0.0.1:5353`:
 - rule removed → the query was forwarded upstream; the real answer was NXDOMAIN because the name does not exist
 - `status` reported `ACTION_REQUIRED` (correct: no system DNS redirection in console mode)
 
-Not yet covered, because the code does not exist yet: config migration, commitment timing, signature verification.
+| Ed25519 RFC 8032 vector, tamper, key rotation, redacted secret Debug | `core/crypto/src/lib.rs` | PASS |
+| Updater: valid list, rollback, tampered/truncated payload, untrusted key, edited manifest, unknown fields | `core/blocklists/tests/updater.rs` | PASS |
+| Updater: too-small, shrunk, bad rule count, garbage lines, wrong list id, oversize, failover, HTTP | `core/blocklists/tests/updater.rs` | PASS |
+| Repository: corrupted active falls back to previous; bundled seed first run/upgrade/tamper | `core/blocklists/tests/updater.rs` | PASS |
+| Bundled list: verifies, 16 representative domains blocked with correct category, 12 lookalikes/support sites allowed | `core/blocklists/tests/gambling_list.rs` | PASS |
+| Service: settings v1→v2 migration, bundled first run, untrusted keys, freshness, stale → PARTIAL | `apps/windows/service/src/*.rs` | PASS |
+
+Milestone 2 live run (Linux container, 2026-09-29), `console --listen 127.0.0.1:5354`:
+- bundled v1: `www.bet365.com`, `sportsbook.draftkings.com`, `stake.com`, `www.pokerstars.com` → `A 0.0.0.0`; `www.gamcare.org.uk` forwarded and resolved
+- signed v2 published to a local source, `blocklist update` → `Updated { from: Some(1), to: 2 }`; the running service reloaded without a restart and `example-new-casino.test` → `A 0.0.0.0`
+- v3 with payload edited after signing → `payload hash does not match manifest`; v2 stayed active and blocking continued
+
+Not yet covered, because the code does not exist yet: commitment timing.
 
 ## Integration tests
 Windows (Chrome/Edge/Firefox, reboot, reconnect, DNS change) and Android (Chrome, second browser, Wi-Fi/mobile, restart, background, lock): **NOT YET RUN**. They need the platform layers and real devices or VMs.
