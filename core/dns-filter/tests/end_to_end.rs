@@ -190,3 +190,13 @@ async fn malformed_input_does_not_kill_server() {
     assert_eq!(r.first_rdata.as_deref(), Some(&[0u8; 4][..]));
     assert!(h.engine.stats().malformed >= 2);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn firefox_doh_canary_gets_nxdomain() {
+    let h = start(&[], vec![fake_upstream().await]).await;
+    let r = udp_ask(h.addr, "use-application-dns.net", TYPE_A).await;
+    assert_eq!((r.rcode, r.answer_count), (3, 0));
+    // Subdomains are not the canary and are forwarded normally.
+    let r = udp_ask(h.addr, "x.use-application-dns.net", TYPE_A).await;
+    assert_eq!(r.first_rdata.as_deref(), Some(&UPSTREAM_IP[..]));
+}

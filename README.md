@@ -4,8 +4,9 @@ Voluntary, system-level gambling-site blocking for Windows and Android (iOS late
 Enforcement runs in the OS network path, not in a browser extension.
 
 **Current state:** the shared rules engine (`core/rules-engine`) is built and unit-tested.
-Platform enforcement (Windows service, Android VpnService) is **not yet implemented**.
-Nothing blocks traffic on any device yet.
+The local filtering DNS resolver (`core/dns-filter`) and the service core (`apps/windows/service`) are built and tested on Linux.
+OS integration (redirecting system DNS, WFP bypass filters, Windows service host, Android VpnService) is **not implemented**.
+Nothing blocks traffic system-wide on any device yet.
 
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)

@@ -30,10 +30,11 @@ The UI controls a privileged component. The UI is **not** the security boundary.
 | Path | Contents | Status |
 |---|---|---|
 | `core/rules-engine` | Domain normalization, rule parsing, trie matcher, list parser | **BUILT** |
+| `core/dns-filter` | Local filtering DNS resolver (UDP+TCP), sinkhole/NXDOMAIN answers, atomic rule swap, Firefox DoH canary | **BUILT** |
 | `core/classification` | Category metadata beyond the enum (display names, grouping) | DESIGNED |
 | `core/blocklists` | Signed manifest format, `BlocklistProvider/Repository/Updater`, `RuleCompiler` | DESIGNED |
 | `core/crypto` | Ed25519 manifest verification, hashing helpers | DESIGNED |
-| `apps/windows/service` | Windows service: local DNS filter, WFP policy, IPC server | DESIGNED |
+| `apps/windows/service` | Service core: versioned settings, on-disk rule lists with live reload, health model, runtime loop, `console`/`rules`/`status` CLI | **BUILT (platform-independent part)**. OS integration (DNS redirection, WFP, SCM service host) **NOT BUILT** |
 | `apps/windows/ui` | Unprivileged UI, IPC client | DESIGNED |
 | `apps/windows/installer` | MSI with service registration and recovery options | DESIGNED |
 | `apps/android/app` | Kotlin, Compose, `VpnService`, core via JNI | DESIGNED |
@@ -73,7 +74,9 @@ Rule sets are immutable once compiled. Removing a rule means compiling a new set
 ### Categories (`category.rs`)
 There are 14 gambling categories plus `user_defined`. An unknown category ID in a newer list becomes `Other(id)` instead of failing the load, so an older client keeps enforcing a newer list.
 
-## 4. Windows (DESIGNED — no code yet)
+## 4. Windows (service core BUILT; OS integration NOT BUILT)
+
+The runtime talks to the OS only through the `SystemIntegration` trait in `apps/windows/service/src/runtime.rs`. The only implementation today is `NoSystemIntegration`, which changes nothing and honestly reports `ACTION_REQUIRED`. The Windows implementation (adapter DNS redirection, WFP filters, service host) is not in the repository.
 
 ```
 GamblingGuard.UI (user) ──named pipe, ACL'd + caller SID check──► GamblingGuard.Service (LocalSystem)

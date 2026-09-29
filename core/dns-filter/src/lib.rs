@@ -14,6 +14,7 @@ pub mod server;
 
 pub use engine::{
     BlockEvent, BlockSink, Decision, FilterConfig, FilterEngine, StatsSnapshot, Transport,
+    FIREFOX_DOH_CANARY,
 };
 pub use message::BlockResponse;
 pub use server::{run_tcp, run_udp};

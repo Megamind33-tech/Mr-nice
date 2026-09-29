@@ -23,7 +23,14 @@ pub struct FilterConfig {
     /// Addresses this filter listens on. Upstreams equal to one of these are
     /// ignored so a misconfiguration cannot create a forwarding loop.
     pub listen_addrs: Vec<SocketAddr>,
+    /// Exact names always answered NXDOMAIN, independent of rules. Used for
+    /// resolver-signalling canaries such as `use-application-dns.net`, which
+    /// Firefox checks for NXDOMAIN before enabling DNS-over-HTTPS by default.
+    pub nxdomain_names: Vec<String>,
 }
+
+/// Canary domain Firefox queries before enabling default DoH.
+pub const FIREFOX_DOH_CANARY: &str = "use-application-dns.net";
 
 impl Default for FilterConfig {
     fn default() -> Self {
@@ -31,6 +38,7 @@ impl Default for FilterConfig {
             block_response: BlockResponse::Sinkhole,
             upstream_timeout: Duration::from_secs(3),
             listen_addrs: Vec::new(),
+            nxdomain_names: vec![FIREFOX_DOH_CANARY.to_owned()],
         }
     }
 }
@@ -48,6 +56,8 @@ pub enum Decision {
         category: Category,
     },
     Forward,
+    /// Resolver-signalling canary; answered NXDOMAIN.
+    Canary,
     /// Name cannot be a valid hostname; refuse rather than forward, so
     /// oddly-encoded names can never slip past matching.
     Refuse,
@@ -171,6 +181,14 @@ impl FilterEngine {
         let Ok(domain) = Domain::parse(name) else {
             return Decision::Refuse;
         };
+        if self
+            .config
+            .nxdomain_names
+            .iter()
+            .any(|n| n == domain.as_str())
+        {
+            return Decision::Canary;
+        }
         match self.rules().verdict(&domain) {
             Verdict::Block { rule, category } => Decision::Block { rule, category },
             Verdict::Allow => Decision::Forward,
@@ -210,6 +228,7 @@ impl FilterEngine {
                 }
                 Some(blocked_response(&query, self.config.block_response))
             }
+            Decision::Canary => Some(error_response(&query, Rcode::NxDomain)),
             Decision::Refuse => {
                 bump(&self.stats.refused);
                 Some(error_response(&query, Rcode::Refused))
