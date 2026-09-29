@@ -9,7 +9,7 @@ use std::path::Path;
 use gg_dns_filter::BlockResponse;
 use serde::{Deserialize, Serialize};
 
-pub const CURRENT_SCHEMA: u32 = 1;
+pub const CURRENT_SCHEMA: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -61,11 +61,36 @@ pub struct PrivacySettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct BlocklistSettings {
+    /// Update sources tried in order: `https://…/` or a directory path, each
+    /// serving `manifest.json` and `payload.txt`. Empty = bundled list only.
+    pub sources: Vec<String>,
+    pub update_interval_hours: u64,
+    /// Hex Ed25519 public keys trusted to sign lists.
+    pub trusted_keys: Vec<String>,
+    /// A list older than this marks protection PARTIALLY_PROTECTED.
+    pub max_age_days: u64,
+}
+
+impl Default for BlocklistSettings {
+    fn default() -> Self {
+        Self {
+            sources: Vec::new(),
+            update_interval_hours: 12,
+            trusted_keys: vec![gg_blocklist::bundled::DEV_SIGNING_KEY.trim().to_owned()],
+            max_age_days: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ServiceSettings {
     pub schema_version: u32,
     pub protection: ProtectionSettings,
     pub network: NetworkSettings,
     pub privacy: PrivacySettings,
+    pub blocklist: BlocklistSettings,
 }
 
 impl Default for NetworkSettings {
@@ -101,6 +126,7 @@ impl Default for ServiceSettings {
             protection: ProtectionSettings::default(),
             network: NetworkSettings::default(),
             privacy: PrivacySettings::default(),
+            blocklist: BlocklistSettings::default(),
         }
     }
 }
@@ -227,6 +253,8 @@ fn migrate(mut value: serde_json::Value, from: u32) -> serde_json::Value {
             }
         }
     }
+    // v1 → v2: adds the `blocklist` section. Absent sections take their
+    // defaults through `#[serde(default)]`, so no data needs moving.
     value
 }
 
@@ -261,7 +289,7 @@ mod tests {
 
     #[test]
     fn missing_fields_take_defaults() {
-        let out = parse(r#"{"schema_version":1,"privacy":{"log_blocked_domains":true}}"#);
+        let out = parse(r#"{"schema_version":2,"privacy":{"log_blocked_domains":true}}"#);
         let s = out.settings();
         assert!(s.privacy.log_blocked_domains);
         assert_eq!(s.network, NetworkSettings::default());
@@ -279,6 +307,20 @@ mod tests {
                     vec!["192.0.2.1:53".parse().unwrap()]
                 );
                 assert_eq!(settings.protection.block_mode, BlockMode::Nxdomain);
+            }
+            other => panic!("expected migration, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn migrates_v1_by_adding_blocklist_defaults() {
+        let out = parse(r#"{"schema_version":1,"privacy":{"log_blocked_domains":true}}"#);
+        match out {
+            LoadOutcome::Migrated { settings, from } => {
+                assert_eq!(from, 1);
+                assert!(settings.privacy.log_blocked_domains, "v1 values kept");
+                assert_eq!(settings.blocklist, BlocklistSettings::default());
+                assert_eq!(settings.blocklist.trusted_keys.len(), 1);
             }
             other => panic!("expected migration, got {other:?}"),
         }

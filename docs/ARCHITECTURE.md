@@ -32,14 +32,15 @@ The UI controls a privileged component. The UI is **not** the security boundary.
 | `core/rules-engine` | Domain normalization, rule parsing, trie matcher, list parser | **BUILT** |
 | `core/dns-filter` | Local filtering DNS resolver (UDP+TCP), sinkhole/NXDOMAIN answers, atomic rule swap, Firefox DoH canary | **BUILT** |
 | `core/classification` | Category metadata beyond the enum (display names, grouping) | DESIGNED |
-| `core/blocklists` | Signed manifest format, `BlocklistProvider/Repository/Updater`, `RuleCompiler` | DESIGNED |
-| `core/crypto` | Ed25519 manifest verification, hashing helpers | DESIGNED |
+| `core/blocklists` | Signed manifests, `BlocklistProvider` (file/HTTP), `BlocklistRepository`, `BlocklistUpdater`, `RuleCompiler`, bundled list, `gg-blocklist-tool` | **BUILT** — see `BLOCKLISTS.md` |
+| `core/crypto` | Ed25519 sign/verify (strict, multi-key), SHA-256 | **BUILT** |
 | `apps/windows/service` | Service core: versioned settings, on-disk rule lists with live reload, health model, runtime loop, `console`/`rules`/`status` CLI | **BUILT (platform-independent part)**. OS integration (DNS redirection, WFP, SCM service host) **NOT BUILT** |
 | `apps/windows/ui` | Unprivileged UI, IPC client | DESIGNED |
 | `apps/windows/installer` | MSI with service registration and recovery options | DESIGNED |
 | `apps/android/app` | Kotlin, Compose, `VpnService`, core via JNI | DESIGNED |
 | `backend/*` | NestJS + PostgreSQL: accounts, partners, manifests, recovery | DESIGNED — not needed for blocking |
 | `packages/contracts` | IPC and API schemas shared across clients | DESIGNED |
+| `packages/blocklists` | Signed representative gambling list + development public key | **BUILT** |
 | `packages/test-data` | Fixture lists, manifests | DESIGNED |
 
 ## 3. Shared core: `gg-rules-engine` (BUILT)

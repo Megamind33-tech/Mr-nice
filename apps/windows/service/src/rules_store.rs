@@ -101,9 +101,13 @@ impl RulesStore {
         )
     }
 
-    pub fn compile(&self) -> Compiled {
+    /// Compile the on-disk lists plus an already-verified blocklist payload.
+    pub fn compile_with(&self, blocklist: Option<&str>) -> Compiled {
         let fingerprint = self.fingerprint();
         let mut rules = Vec::new();
+        if let Some(text) = blocklist {
+            rules.extend(parse_list(text, Category::Other("uncategorized".into())).rules);
+        }
         let mut line_errors = 0;
         let mut unreadable = Vec::new();
         let files = self.list_files();
@@ -207,7 +211,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = RulesStore::new(dir.path().join("rules"));
         store.ensure_layout().unwrap();
-        let before = store.compile();
+        let before = store.compile_with(None);
         assert!(!blocked(&before, "example-gambling-domain.com"));
         assert!(blocked(&before, "dns.google"), "bypass list active");
 
@@ -217,7 +221,7 @@ mod tests {
         assert!(!store
             .add_user_domain("example-gambling-domain.com")
             .unwrap());
-        let added = store.compile();
+        let added = store.compile_with(None);
         assert_ne!(added.fingerprint, before.fingerprint);
         assert!(blocked(&added, "www.example-gambling-domain.com"));
         assert_eq!(
@@ -231,7 +235,10 @@ mod tests {
         assert!(!store
             .remove_user_domain("example-gambling-domain.com")
             .unwrap());
-        assert!(!blocked(&store.compile(), "example-gambling-domain.com"));
+        assert!(!blocked(
+            &store.compile_with(None),
+            "example-gambling-domain.com"
+        ));
     }
 
     #[test]
@@ -248,7 +255,7 @@ mod tests {
         std::fs::write(dir.path().join("a.txt"), "good.test\nbad..line\n").unwrap();
         std::fs::write(dir.path().join("b.txt"), "other.test\n").unwrap();
         std::fs::write(dir.path().join("ignored.json"), "casino.test\n").unwrap();
-        let c = RulesStore::new(dir.path()).compile();
+        let c = RulesStore::new(dir.path()).compile_with(None);
         assert_eq!((c.files, c.line_errors), (2, 1));
         assert!(blocked(&c, "good.test"));
         assert!(blocked(&c, "other.test"));
@@ -257,7 +264,7 @@ mod tests {
 
     #[test]
     fn missing_directory_compiles_to_empty_set() {
-        let c = RulesStore::new("/nonexistent/gg-rules").compile();
+        let c = RulesStore::new("/nonexistent/gg-rules").compile_with(None);
         assert!(c.matcher.is_empty());
     }
 }

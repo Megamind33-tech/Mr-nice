@@ -1,0 +1,18 @@
+[package]
+name = "gg-blocklist"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Signed blocklist distribution: manifests, providers, local repository, updater"
+
+[dependencies]
+gg-crypto = { path = "../crypto" }
+gg-rules-engine = { path = "../rules-engine" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[dev-dependencies]
+tempfile = "3"

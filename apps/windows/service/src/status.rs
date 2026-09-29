@@ -22,6 +22,8 @@ pub struct Components {
     pub bypass_filters: bool,
     /// Rule set compiled with at least one rule and no unreadable list.
     pub rules_loaded: bool,
+    /// A verified gambling blocklist is active and within its maximum age.
+    pub blocklist_fresh: bool,
 }
 
 impl Components {
@@ -38,6 +40,7 @@ impl Components {
             Components {
                 bypass_filters: true,
                 rules_loaded: true,
+                blocklist_fresh: true,
                 ..
             } => ProtectionHealth::Protected,
             _ => ProtectionHealth::PartiallyProtected,
@@ -49,6 +52,7 @@ impl Components {
 pub struct StatusReport {
     pub health: ProtectionHealth,
     pub components: Components,
+    pub blocklist: Option<crate::blocklist::BlocklistStatus>,
     pub rule_count: usize,
     pub upstreams: Vec<String>,
     pub queries: u64,
@@ -70,7 +74,17 @@ mod tests {
             dns_takeover: takeover,
             bypass_filters: filters,
             rules_loaded: rules,
+            blocklist_fresh: true,
         }
+    }
+
+    #[test]
+    fn stale_blocklist_is_partial_protection() {
+        let stale = Components {
+            blocklist_fresh: false,
+            ..c(true, true, true, true)
+        };
+        assert_eq!(stale.health(), ProtectionHealth::PartiallyProtected);
     }
 
     #[test]

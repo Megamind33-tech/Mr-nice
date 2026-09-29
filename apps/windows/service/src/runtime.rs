@@ -14,9 +14,15 @@ use gg_dns_filter::{run_tcp, run_udp, BlockEvent, BlockSink, FilterConfig, Filte
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
 
-use crate::rules_store::{Fingerprint, RulesStore};
+use crate::blocklist::{now_unix, BlocklistManager};
+use crate::rules_store::{Compiled, Fingerprint, RulesStore};
 use crate::settings::ServiceSettings;
 use crate::status::{Components, StatusReport};
+
+/// Delay before the first remote update attempt after start.
+const FIRST_UPDATE_DELAY: Duration = Duration::from_secs(10);
+/// Retry delay after a failed update.
+const UPDATE_RETRY: Duration = Duration::from_secs(30 * 60);
 
 const RULE_POLL: Duration = Duration::from_secs(3);
 const REASSERT_EVERY: Duration = Duration::from_secs(15);
@@ -72,6 +78,7 @@ impl BlockSink for LogSink {
 pub struct RuntimeConfig {
     pub settings: ServiceSettings,
     pub rules_dir: PathBuf,
+    pub blocklist_dir: PathBuf,
     pub status_path: Option<PathBuf>,
 }
 
@@ -106,9 +113,11 @@ pub async fn run(
     }
     let listen_addrs: Vec<SocketAddr> = bound.iter().map(|(a, _, _)| *a).collect();
 
-    // 2. Rules.
-    let compiled = store.compile();
-    let mut rules_ok = compiled.unreadable.is_empty() && !compiled.matcher.is_empty();
+    // 2. Rules: verified gambling blocklist (stored or bundled) + local lists.
+    let mut blocklist =
+        BlocklistManager::new(config.blocklist_dir.clone(), settings.blocklist.clone());
+    let compiled = store.compile_with(blocklist.payload());
+    let mut rules_ok = rules_healthy(&compiled);
     log_ruleset(&compiled);
     let mut fingerprint: Fingerprint = compiled.fingerprint;
 
@@ -139,29 +148,62 @@ pub async fn run(
         rules_loaded: rules_ok,
         bypass_filters: integration.ensure_bypass_filters(),
         dns_takeover: integration.ensure_dns_takeover(),
+        blocklist_fresh: blocklist.is_fresh(now_unix()),
     };
     integration.flush_dns_cache();
     tracing::info!(event = "SERVICE_START", health = ?components.health(), ?components);
 
     let mut last_reassert = Instant::now();
+    let mut next_update = Instant::now() + FIRST_UPDATE_DELAY;
+    let mut pending_update: Option<tokio::task::JoinHandle<gg_blocklist::UpdateOutcome>> = None;
     let mut tick = tokio::time::interval(RULE_POLL);
     loop {
-        write_status(&config, &engine, components);
+        write_status(&config, &engine, components, &blocklist);
         tokio::select! {
             _ = tick.tick() => {}
             _ = shutdown.changed() => break,
         }
 
-        let fp = store.fingerprint();
-        if fp != fingerprint {
-            let compiled = store.compile();
+        // Remote updates run off the async threads; the filter keeps serving
+        // the current list throughout.
+        if pending_update.as_ref().is_some_and(|h| h.is_finished()) {
+            let handle = pending_update.take().expect("checked above");
+            match handle.await {
+                Ok(outcome) => {
+                    let ok = !matches!(outcome, gg_blocklist::UpdateOutcome::Failed { .. });
+                    blocklist.record(&outcome);
+                    next_update = Instant::now()
+                        + if ok {
+                            blocklist.update_interval()
+                        } else {
+                            UPDATE_RETRY
+                        };
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "blocklist update task panicked");
+                    next_update = Instant::now() + UPDATE_RETRY;
+                }
+            }
+        }
+        if blocklist.has_sources() && pending_update.is_none() && Instant::now() >= next_update {
+            let job = blocklist.job();
+            pending_update = Some(tokio::task::spawn_blocking(move || job.run()));
+        }
+
+        let list_changed = blocklist.changed_on_disk();
+        if list_changed {
+            blocklist.reload();
+        }
+        if list_changed || store.fingerprint() != fingerprint {
+            let compiled = store.compile_with(blocklist.payload());
             log_ruleset(&compiled);
-            rules_ok = compiled.unreadable.is_empty() && !compiled.matcher.is_empty();
+            rules_ok = rules_healthy(&compiled);
             fingerprint = compiled.fingerprint;
             engine.replace_rules(compiled.matcher);
             integration.flush_dns_cache();
             components.rules_loaded = rules_ok;
         }
+        components.blocklist_fresh = blocklist.is_fresh(now_unix());
 
         if last_reassert.elapsed() >= REASSERT_EVERY {
             last_reassert = Instant::now();
@@ -184,6 +226,9 @@ pub async fn run(
     for t in tasks {
         t.abort();
     }
+    if let Some(h) = pending_update {
+        h.abort();
+    }
     Ok(())
 }
 
@@ -200,7 +245,11 @@ fn choose_upstreams(settings: &ServiceSettings, discovered: Vec<SocketAddr>) -> 
     chosen
 }
 
-fn log_ruleset(c: &crate::rules_store::Compiled) {
+fn rules_healthy(c: &Compiled) -> bool {
+    c.unreadable.is_empty() && !c.matcher.is_empty()
+}
+
+fn log_ruleset(c: &Compiled) {
     tracing::info!(
         event = "RULESET_UPDATE",
         rules = c.matcher.len(),
@@ -210,7 +259,12 @@ fn log_ruleset(c: &crate::rules_store::Compiled) {
     );
 }
 
-fn write_status(config: &RuntimeConfig, engine: &FilterEngine, components: Components) {
+fn write_status(
+    config: &RuntimeConfig,
+    engine: &FilterEngine,
+    components: Components,
+    blocklist: &BlocklistManager,
+) {
     let Some(path) = &config.status_path else {
         return;
     };
@@ -218,6 +272,7 @@ fn write_status(config: &RuntimeConfig, engine: &FilterEngine, components: Compo
     let report = StatusReport {
         health: components.health(),
         components,
+        blocklist: blocklist.status(now_unix()),
         rule_count: engine.rules().len(),
         upstreams: engine.upstreams().iter().map(|u| u.to_string()).collect(),
         queries: s.queries,
