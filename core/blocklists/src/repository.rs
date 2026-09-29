@@ -83,6 +83,15 @@ impl BlocklistRepository {
             .or_else(|| self.load(Slot::Previous, keys).map(|l| (Slot::Previous, l)))
     }
 
+    /// Cheap change marker for the active slot (manifest mtime), so a
+    /// running service notices updates made by another process without
+    /// re-verifying the payload on every poll.
+    pub fn active_stamp(&self) -> Option<std::time::SystemTime> {
+        std::fs::metadata(self.dir("active").join(MANIFEST_FILE))
+            .and_then(|m| m.modified())
+            .ok()
+    }
+
     /// Store `list` as active; the old active becomes previous. The new list
     /// is fully written and synced in staging before any rename happens, so
     /// an interruption leaves either the old or the new set in place.

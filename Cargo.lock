@@ -296,6 +296,8 @@ dependencies = [
 name = "gg-windows-service"
 version = "0.1.0"
 dependencies = [
+ "gg-blocklist",
+ "gg-crypto",
  "gg-dns-filter",
  "gg-rules-engine",
  "serde",

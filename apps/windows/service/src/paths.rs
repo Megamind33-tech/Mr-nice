@@ -36,6 +36,9 @@ impl DataPaths {
     pub fn rules_dir(&self) -> PathBuf {
         self.root.join("rules")
     }
+    pub fn blocklist_dir(&self) -> PathBuf {
+        self.root.join("blocklists").join("gambling")
+    }
     pub fn settings(&self) -> PathBuf {
         self.root.join("settings.json")
     }

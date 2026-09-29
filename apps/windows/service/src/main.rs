@@ -3,6 +3,7 @@
 //! The Windows system-integration layer is not included in this crate yet.
 //! `console` runs the local DNS filter with no system changes, for testing.
 
+mod blocklist;
 mod fsutil;
 mod paths;
 mod rules_store;
@@ -15,7 +16,7 @@ use std::net::SocketAddr;
 use tokio::sync::watch;
 
 fn usage() -> ! {
-    eprintln!("usage: gambling-guard-service console [--listen ADDR]... | rules add|remove DOMAIN | rules list | status");
+    eprintln!("usage: gambling-guard-service console [--listen ADDR]... | rules add|remove DOMAIN | rules list | blocklist status|update | status");
     std::process::exit(2)
 }
 
@@ -37,6 +38,7 @@ fn main() {
             }
             _ => usage(),
         },
+        Some("blocklist") => blocklist_cmd(args.get(1).map(String::as_str), &paths),
         Some("status") => match std::fs::read_to_string(paths.status()) {
             Ok(t) => println!("{t}"),
             Err(e) => {
@@ -109,6 +111,7 @@ fn console(args: &[String], paths: &paths::DataPaths) {
         let cfg = runtime::RuntimeConfig {
             settings,
             rules_dir: paths.rules_dir(),
+            blocklist_dir: paths.blocklist_dir(),
             status_path: Some(paths.status()),
         };
         if let Err(e) = runtime::run(cfg, Box::new(runtime::NoSystemIntegration), rx).await {
@@ -116,4 +119,33 @@ fn console(args: &[String], paths: &paths::DataPaths) {
             std::process::exit(1)
         }
     });
+}
+
+fn blocklist_cmd(sub: Option<&str>, paths: &paths::DataPaths) {
+    let settings = settings::load(&paths.settings()).settings().clone();
+    let mut manager = blocklist::BlocklistManager::new(paths.blocklist_dir(), settings.blocklist);
+    match sub {
+        Some("status") => {}
+        Some("update") => {
+            let outcome = manager.job().run();
+            println!("{outcome:?}");
+            manager.reload();
+            if matches!(outcome, gg_blocklist::UpdateOutcome::Failed { .. }) {
+                print_blocklist(&manager);
+                std::process::exit(1);
+            }
+        }
+        _ => usage(),
+    }
+    print_blocklist(&manager);
+}
+
+fn print_blocklist(manager: &blocklist::BlocklistManager) {
+    match manager.status(blocklist::now_unix()) {
+        Some(s) => println!(
+            "{}",
+            serde_json::to_string_pretty(&s).expect("status serializes")
+        ),
+        None => println!("no verified blocklist available"),
+    }
 }
