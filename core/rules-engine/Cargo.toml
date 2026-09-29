@@ -1,0 +1,10 @@
+[package]
+name = "gg-rules-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Platform-independent domain normalization and rule matching for Gambling Guard"
+
+[dependencies]
+idna = "1"
+thiserror = "2"
