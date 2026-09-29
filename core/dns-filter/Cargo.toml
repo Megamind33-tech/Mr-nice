@@ -1,0 +1,15 @@
+[package]
+name = "gg-dns-filter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local filtering DNS resolver used by Gambling Guard platform services"
+
+[dependencies]
+gg-rules-engine = { path = "../rules-engine" }
+thiserror = "2"
+tokio = { version = "1", features = ["net", "rt", "sync", "time", "io-util", "macros"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time", "io-util", "macros"] }

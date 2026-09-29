@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core/rules-engine"]
+members = ["core/rules-engine", "core/dns-filter"]
 
 [workspace.package]
 edition = "2021"
