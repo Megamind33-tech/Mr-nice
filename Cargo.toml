@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["core/rules-engine", "core/dns-filter", "apps/windows/service"]
+members = [
+  "core/crypto",
+  "core/blocklists",
+  "core/rules-engine", "core/dns-filter", "apps/windows/service"]
 
 [workspace.package]
 edition = "2021"
